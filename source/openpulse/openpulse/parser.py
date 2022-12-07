@@ -34,16 +34,14 @@ except ImportError as exc:
         " such as by 'pip install openqasm3[parser]'."
     ) from exc
 
-import openpulse.ast as openpulse_ast
-from openqasm3._antlr.qasm3Parser import qasm3Parser
 from openqasm3 import ast
-from openqasm3.parser import (
-    span,
-    QASMNodeVisitor,
-    _raise_from_context,
-    parse as parse_qasm3,
-)
+from openqasm3._antlr.qasm3Parser import qasm3Parser
+from openqasm3.parser import QASMNodeVisitor, _raise_from_context
+from openqasm3.parser import parse as parse_qasm3
+from openqasm3.parser import span
 from openqasm3.visitor import QASMVisitor
+
+import openpulse.ast as openpulse_ast
 
 from ._antlr.openpulseLexer import openpulseLexer
 from ._antlr.openpulseParser import openpulseParser
@@ -216,6 +214,28 @@ class OpenPulseNodeVisitor(openpulseParserVisitor):
             expression = None
         return ast.ReturnStatement(expression=expression)
 
+    @span
+    def visitArrayType(self, ctx: qasm3Parser.ArrayTypeContext):
+        base = self.visit(ctx.scalarType())
+        if not isinstance(
+            base,
+            (
+                ast.BitType,
+                ast.IntType,
+                ast.UintType,
+                ast.FloatType,
+                ast.AngleType,
+                ast.BoolType,
+                ast.ComplexType,
+                ast.DurationType,  # this is new in openpulse
+            ),
+        ):
+            _raise_from_context(ctx.scalarType(), "invalid scalar type for array")
+        return ast.ArrayType(
+            base_type=base,
+            dimensions=[self.visit(expression) for expression in ctx.expressionList().expression()],
+        )
+
 
 # Reuse some QASMNodeVisitor methods in OpenPulseNodeVisitor
 # The following methods are overridden in OpenPulseNodeVisitor and thus not imported:
@@ -232,7 +252,6 @@ OpenPulseNodeVisitor.visitAliasDeclarationStatement = QASMNodeVisitor.visitAlias
 OpenPulseNodeVisitor.visitAliasExpression = QASMNodeVisitor.visitAliasExpression
 OpenPulseNodeVisitor.visitAnnotation = QASMNodeVisitor.visitAnnotation
 OpenPulseNodeVisitor.visitArgumentDefinition = QASMNodeVisitor.visitArgumentDefinition
-OpenPulseNodeVisitor.visitArrayType = QASMNodeVisitor.visitArrayType
 OpenPulseNodeVisitor.visitAssignmentStatement = QASMNodeVisitor.visitAssignmentStatement
 OpenPulseNodeVisitor.visitBarrierStatement = QASMNodeVisitor.visitBarrierStatement
 OpenPulseNodeVisitor.visitBitshiftExpression = QASMNodeVisitor.visitBitshiftExpression
